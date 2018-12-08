@@ -1,0 +1,306 @@
+// LCD를 쉽게 제어하기 위한 라이브러리를 추가합니다.
+#include <LiquidCrystal.h>
+//LCD 화면에 내용을 출력해 주는 함수
+void Print();
+//초음파 센서를 이용해 거리를 측정해 주는 함수
+float Distance();
+//운동한 시간을 측정해 주는 함수
+void Time();
+//운동 종류별 함수
+void Squart();
+void PushUp();
+
+// 오렌지보드의 4, 5, 6, 7, 8, 9 번핀을 사용하도록 지정된 lcd객체를 생성합니다.
+LiquidCrystal lcd(4, 5,6,7,8,9);
+//게임상태여부 버튼
+const int buttonPin=10;
+//초음파센서 셋팅
+int trigPin = 13;
+int echoPin = 12;
+
+//가변저항의 값에 따라 모드를 고르는 기능
+int modeSet=A0;
+//가변저항의 값을 읽어 들여온 mode 변수
+int mode=analogRead(modeSet);
+
+//운동 상태여부를 나타내 주는 변수들
+boolean buttonStatus; //버튼상태
+int Flag;                       //상태 여부
+int finish;                    //운동 종료
+
+//운동을 계속하고 있는지, 아닌지 확인하는 변수(가까이 엎드려 있는지 유무)
+boolean up_flag=false;
+boolean down_flag=false; 
+
+int count=0;                // 푸시업/스쿼트 운동 갯수 
+float kcal=0;                //소모된 칼로리
+
+//시간 변수
+long previousMillis = 0;            // LED에 마지막으로 수정된 내용을 저장할 변수
+long startTime ;                    // 스탑워치의 시작 시간
+long elapsedTime ;                  // 스탑워치의 지연된 시간
+int fractional;                     // 시간의 소수점 아래 부분
+
+// LCD 화면에 COUNT와 Kcal를 출력해 주는 함수
+void Print(){
+    // 0번째 줄 0번째 셀부터 입력하게 합니다.
+    lcd.setCursor(0,0);
+    // 아래의 문장을 출력합니다.
+    lcd.print("COUNT:");
+    lcd.print(count);    
+    
+    // 1번째 줄 0번째 셀부터 입력하게 합니다.
+    lcd.setCursor(0,1);
+    // 아래의 문장을 출력합니다.
+    lcd.print("Kcal:");
+    lcd.print(kcal);
+    delay(400);   
+}
+
+//초음파 센서를 이용해 거리를 측정해 주는 함수
+float Distance(){  
+        
+  //초음파 센서를 이용한 거리 값 측정
+  float duration, distance;
+  digitalWrite(trigPin, HIGH);
+  delay(10);
+  digitalWrite(trigPin, LOW);
+  // 초음파를 보낸다. 다 보내면 echo가 HIGH 상태로 대기하게 된다.
+  
+  duration = pulseIn(echoPin, HIGH); // echoPin 이 HIGH를 유지한 시간을 저장 한다.
+  distance = ((float)(340 * duration) / 10000) / 2;  // HIGH 였을 때 시간(초음파가 보냈다가 다시 들어온 시간)을 가지고 거리를 계산 한다.
+
+  // cm 값으로 변환한 값을 반환
+  return distance;
+ }
+ 
+//운동한 시간을 측정해 주는 함수
+void Time(){  
+    //푸쉬업 카운트가 0이면,
+    if(count==0){      
+      startTime = millis();                    //시작 시간을 저장
+      }
+      
+    //푸쉬업 카운트가 1이상이면, 운동한 시간을 계산하기 시작
+      if(count>=1){
+         elapsedTime =   millis() - startTime;              //지연 시간을 저장
+
+         //소수점 윗부분
+         Serial.print( (int)(elapsedTime / 1000L));         //초로 변환하기 위해 1000으로 나누어 준다.그리고, print 하기위해 int형으로 캐스팅 해준다
+         
+        //소수점  아래 출력
+        Serial.print(".");                           
+        //시간의 소수점 부분을 구하기위한 모듈러 연산자를 사용.모듈러 연산자(%)란 나머지를 반환해 주는 함수이다.
+       fractional = (int)(elapsedTime % 1000L);
+
+       //모듈러 연산자의 갯수에 따라서 0을 덧붙여 준다.
+       if (fractional == 0)
+          Serial.print("000");      // add three zero's
+       else if (fractional < 10)    // if fractional < 10 the 0 is ignored giving a wrong time, so add the zeros
+          Serial.print("00");       // add two zeros
+       else if (fractional < 100)
+          Serial.print("0");        // add one zero
+       Serial.println(fractional);  // 소수점 부분 출력
+    
+           //시간이 경과되었다면,
+           if ( (millis() - previousMillis > 100) ) {
+          previousMillis = millis();           //이전 시간을 최근 시간으로 업데이트 해준다.
+           }
+        }//푸쉬업 카운트가 1이상이면의 끝
+  }//운동한 시간을 출력해 주는 함수의 끝
+
+//스쿼트 함수
+void Squart(){
+    //초음파 센서로부터 측정한 거리를 가져온다.
+  float distance=Distance();
+  //시리얼 모니터에 측정한 거리 출력
+  Serial.print(distance);
+  Serial.print("cm ");
+  
+  //거리가 40<distance<70 이면 아래로 움직인 것이므로 down_flag를 true로 설정
+    if ((40<distance) && (distance<70) ){
+    down_flag=true;
+    up_flag=false;                        //다운을 한후, up을 해줘야 카운트가 올라가게끔!
+    }    
+    
+//70~75 사이의 값을 넣지 않은이유 : 70근방에서 부르르 떨경우, 운동한 갯수가 올라가므로 제외해 주었다.
+
+ //거리가 75<distance<100 이면 위로 움직인 것이므로 up_flag를 true로 설정    
+    else if( (75<distance) && (distance<100) ){
+    up_flag=true;
+    }
+ //그밖의 경우 플래그를 변경해 주지 않는다.
+    else{      
+  }   
+   
+//down_flag와 up_flag가 true 라면         
+    if( (down_flag==true) && (up_flag==true) ){
+    //푸쉬업 카운트,kcal를 증가,
+    count++;
+    kcal=kcal+0.05;    
+   
+    //다시 down_flag와 up_flag를 false로 설정해준다.
+        down_flag=false;
+        up_flag=false;        
+     // LCD를 초기화 합니다.
+    lcd.clear();
+    }
+     Serial.print("Squart_count  ");
+     //스쿼트 갯수와 kcal를 시리얼 모니터에 출력
+    Serial.println(count);    
+    //스쿼트 갯수와 kcal를 LCD 화면에 출력
+    Print();          
+  }
+
+//푸쉬업 함수
+void PushUp(){
+    //초음파 센서로부터 측정한 거리를 가져온다.
+  float distance=Distance();
+  //시리얼 모니터에 측정한 거리 출력
+  Serial.print(distance);
+  Serial.print("cm ");
+  
+//거리가 0<distance<15이면 아래로 움직인 것이므로 down_flag를 true로 설정
+    if ((0<distance) && (distance<15) ){
+    down_flag=true;
+    up_flag=false;                        //다운을 한후, up을 해줘야 카운트가 올라가게끔!
+    }    
+//15~20 사이의 값을 넣지 않은이유 : 15근방에서 부르르 떨경우, 운동한 갯수가 올라가므로 제외해 주었다.
+
+ //거리가 20<distance<50이면 위로 움직인 것이므로 up_flag를 true로 설정    
+    else if( (20<distance) && (distance<50) ){
+    up_flag=true;
+    }
+ //그밖의 경우 플래그를 변경해 주지 않는다.
+    else{      
+  }      
+//down_flag와 up_flag가 true 라면         
+    if( (down_flag==true) && (up_flag==true) ){
+    //푸쉬업 카운트,kcal를 증가,
+    count++;
+    kcal=kcal+0.825;    
+     //다시 down_flag와 up_flag를 false로 설정해준다.
+        down_flag=false;
+        up_flag=false;        
+     // LCD를 초기화 합니다.
+    lcd.clear();
+    }
+     Serial.print("Pushup_count  ");
+     //푸쉬업 갯수와 kcal를 시리얼 모니터에 출력
+    Serial.println(count);    
+    //푸쉬업 갯수와 kcal를 LCD 화면에 출력
+    Print();        
+  }
+
+// 실행시 가장 먼저 호출되는 함수이며, 최초 1회만 실행됩니다.
+// 변수를 선언하거나 초기화를 위한 코드를 포함합니다.
+void setup() {
+ //시리얼 모니터 시작
+  Serial.begin(9600);  
+  // 초음파 센서 trig를 출력모드로 설정, echo를 입력모드로 설정  
+  pinMode(trigPin, OUTPUT);
+  pinMode(echoPin, INPUT);  
+  //가변저항으로 모드를 받아오는것을 입력모드로 설정
+  pinMode(modeSet,INPUT);
+  // 16개의 셀과 2줄을 사용하도록 설정합니다.
+  lcd.begin(16,2);  
+}
+
+// setup() 함수가 호출된 이후, loop() 함수가 호출되며,
+// 블록 안의 코드를 무한히 반복 실행됩니다.
+void loop(){
+//버튼이 눌리면 시작하도록 설정
+if(digitalRead(buttonPin)==HIGH)
+{
+  if(Flag==0)
+  {
+    Flag=1;
+    buttonStatus=!buttonStatus;        
+    lcd.clear();
+  }
+}
+//초기화면 
+else if(digitalRead(buttonPin)==LOW && Flag==0 && buttonStatus==0){  
+    Flag=0;                  
+       //운동 모드 측정
+      mode=analogRead(modeSet);
+     Serial.println(mode);   
+    //lcd에 안내출력
+    lcd.setCursor(0,0);
+    lcd.print("SetMode-resistor");
+    lcd.setCursor(0,1);
+    lcd.print("Start-Button");   
+   delay(2000);
+                      //가변저항값이 0이상 500미만이면 Squart Mode 라는것을 안내
+                      if( (0<=mode) && (mode<500) ){
+                          lcd. clear();
+                          lcd.setCursor(0,0);
+                          lcd.print("Squart Mode");
+                          delay(500);
+                          lcd.clear();              
+
+                         //카운트,시작시간,kcal를 0으로 초기화
+                         count=0;
+                         startTime=0;
+                         kcal=0;
+                               
+                    }    
+
+                       //아닐경우, 가변 저항 값이 500<mode<1023 이면 PushUp Mode라는 것을 안내    
+                   else{
+                            lcd. clear();
+                            lcd.setCursor(0,1);
+                            lcd.print("PushUp Mode");
+                             delay(500);
+                            lcd.clear();
+                            
+                         //카운트,시작시간,kcal를 0으로 초기화
+                         count=0;
+                         startTime=0;
+                         kcal=0;
+                  }
+}        
+else if(digitalRead(buttonPin)==LOW && Flag==0 && buttonStatus==0){
+  Flag=0;
+  }
+else{
+    Flag=0;            
+}
+
+//버튼이 눌렸으면 운동 시작!
+    if(buttonStatus){     
+                    //운동한 시간을 측정
+                   Time();    
+
+                      //가변 저항 값이 0<mode<500 이면 Squart Mode가 실행 됩니다.                      
+                  if( (0<=mode) && (mode<500) ){
+                          Squart();               
+                    }
+                                                  
+                      //아닐경우, 가변 저항 값이 500<mode<1023 이면 PushUp Mode가 실행 됩니다.          
+                   else if((500<=mode) && (mode<=1023)){         
+                    PushUp();
+                  }             
+
+                delay(300);
+                                
+               //버튼을 다시 누르면, 운동 종료         
+              if(digitalRead(buttonPin)==HIGH){
+
+                finish = true;
+                buttonStatus=0;   
+        
+                    if(finish==1 && buttonStatus==0){
+                      lcd.clear();
+                      lcd.setCursor(0,0);
+                      lcd.print("Final Score");
+                      delay(1000);
+                      lcd.clear(); 
+                      Print();
+                      delay(3000);
+                      finish= false; 
+                      lcd.clear();
+                      }//if 의 끝
+                 } //버튼의 눌림여부의 끝
+    }      
+ }
